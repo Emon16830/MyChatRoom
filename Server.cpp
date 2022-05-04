@@ -1,73 +1,92 @@
-ï»¿#include <sys/types.h>
-#include <sys/socket.h>
-#include <stdio.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/shm.h>
-#include <iostream>
+#include "server.h"
+
 using namespace std;
 
-int main()
-{
-    //å®šä¹‰socket å¥—æ¥å­—
-    int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+//³õÊ¼»¯sock_arrÊı×é£¬¼ÇÂ¼Ì×½Ó×ÖÊÇ·ñ´ò¿ª
+vector<bool> Server::sock_arr(10000, false);
 
-    //å®šä¹‰sockaddr_in
-    struct sockaddr_in server_sockaddr;
-    //TCP/IPåè®®
-    server_sockaddr.sin_family = AF_INET;
-    //ç«¯å£å·
-    server_sockaddr.sin_port = htons(8023);
-    //æœ¬æœºip 127.0.0.1
-    server_sockaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+//¹¹Ôì
+Server::Server(int port, string ip) : server_port(port), server_ip(ip) {}
 
-    //bind ç»™å¥—æ¥å­—ç»‘å®šåœ°å€
-    if (bind(server_sockfd, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) == -1)
-    {
-        perror("bind");//è¾“å‡ºé”™è¯¯åŸå› ï¼Œå¯ä»¥try catch
-        exit(1);//ç»“æŸç¨‹åº
-    }
+//Îö¹¹
+Server::~Server() {
+	for (int i = 0; i < sock_arr.size(); ++i) {
+		if (sock_arr[i]) {
+			close(i);
+		}
+	}
+	close(server_sockfd);
+}
 
-    //listenï¼Œå°†åˆ›å»ºå¥½çš„socketå¥—æ¥å­—è®¾ç½®ä¸ºç›‘å¬çŠ¶æ€
-    if (listen(server_sockfd, 20) == -1)
-    {
-        perror("listen");//è¾“å‡ºé”™è¯¯åŸå› 
-        exit(1);//ç»“æŸç¨‹åº
-    }
+void Server::run() {
+	//¶¨Òåsockfd
+		
+	server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
-    //å®¢æˆ·ç«¯å¥—æ¥å­—
-    struct sockaddr_in client_addr;
-    socklen_t length = sizeof(client_addr);
+	//¶¨Òåsocketaddr_in
+	struct sockaddr_in server_sockaddr;
+	server_sockaddr.sin_family = AF_INET;				// TCP/IPĞ­Òé×å£¬AF_INET ±¾»úÍ¨ĞÅ
+	server_sockaddr.sin_port = htons(server_port);		// ½«¶Ë¿ÚµÄÖ÷»ú×Ö½ÚĞò×ª»»ÎªÍøÂç×Ö½ÚĞò
+	server_sockaddr.sin_addr.s_addr = inet_addr(server_ip.c_str());		//ipµØÖ·£¬127.0.0.1
 
-    //accept ä»å·²ç»å®Œæˆè¿æ¥çš„é˜Ÿåˆ—ä¸­å–å‡ºè¿æ¥
-    int conn = accept(server_sockfd, (struct sockaddr*)&client_addr, &length);
-    if (conn < 0)
-    {
-        perror("connect");//è¾“å‡ºé”™è¯¯åŸå› 
-        exit(1);//ç»“æŸç¨‹åº
-    }
-    cout << "å®¢æˆ·ç«¯æˆåŠŸè¿æ¥\n";
+	//¸ø´´½¨ºÃµÄsocket °ó¶¨µØÖ·
+	if (bind(server_sockfd, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) == -1) {
+		perror("Bind error");
+		exit(-1);
+	}
+	
+	//½«´´½¨ºÃµÄsocket·ÅÈëlisten¼àÌı¶ÓÁĞ£¬µÈ´ı¿Í»§¶ËµÄÇëÇó
+	if (listen(server_sockfd, 5) == -1) {
+		perror("Listen error");
+		exit(-1);
+	}
 
-    //æ¥æ”¶ç¼“å†²åŒº
-    char buffer[1000];
+	//Îª¿Í»§¶Ë´´½¨Ì×½Ó×Ö
+	struct sockaddr_in client_addr;
+	socklen_t client_addr_length = sizeof(client_addr);
 
-    //æ¥æ”¶æ•°æ®
-    while (true)
-    {
-        memset(buffer, 0, sizeof(buffer));
-        int len = recv(conn, buffer, sizeof(buffer), 0);
-        //å½“å®¢æˆ·ç«¯å‘é€exitæˆ–è€…å¼‚å¸¸ç»“æŸæ—¶ï¼Œé€€å‡º
-        if (strcmp(buffer, "exit") == 0 || len <= 0)
-            break;
-        cout << "æ”¶åˆ°å®¢æˆ·ç«¯ä¿¡æ¯ï¼š" << buffer << endl;
-    }
-    //æ’¤é”€å¥—æ¥å­—
-    close(conn);
-    
-    close(server_sockfd);
-    return 0;
+	//²»¶ÏÈ¡³öĞÂÁ¬½Ó²¢ÇÒ´´½¨×ÓÏß³ÌÎªÆä·şÎñ
+	while (true) {
+		//accept ·µ»ØÒ»¸öĞÂµÄÁ¬½Ó socket£¬·şÎñÆ÷¶ÁĞ´conn½øĞĞÍ¨ĞÅ
+		//accept ²¢²»¹ØĞÄÍøÂç×´Ì¬£¬Ö»ÊÇ´Ó¼àÌı¶ÓÁĞÖĞÈ¡³öÁ¬½Ó
+		int conn = accept(server_sockfd, (struct sockaddr*)&client_addr, &client_addr_length);
+		if (conn < 0) {
+			perror("Connect error");
+			exit(-1);
+		}
+		cout << "The Client ID : " << conn << " connected successful" << endl;
+		sock_arr.push_back(conn);
+		//´´½¨Ïß³Ì£¬ÈÃ×ÓÏß³Ì½øĞĞÁ¬½ÓºÃµÄsocket½øĞĞ¶ÁĞ´
+		thread t(Server::RecvMsg, conn);
+		//ÓëÖ÷Ïß³Ì·ÖÀë³öÀ´£¬join() »á¶ÂÈûÖ÷Ïß³Ì
+		t.detach();
+	}
+}
+
+//×ÓÏß³Ì¹¤×÷º¯Êı
+void Server::RecvMsg(int conn) {
+	//ÉèÁ¢½ÓÊÜ»º´æÇø
+	char buffer[1000];
+	//Ñ­»·¼ì²â½ÓÊÜÊı¾İ
+	while (true) {
+		//³õÊ¼»¯ÄÚ´æ¿é£¬×÷ÓÃÍ¬ bzero()
+		memset(buffer, 0, sizeof(buffer));
+		//´Óconn ±êÊ¶µÄsocket µÄTCP»º´æÇøÖĞ¶ÁÈ¡£¬²¢¸³µ½bufferÖĞ£¬0 ÎªÊÇ·ñÇå³ıTCP»º´æÇø
+		int len = recv(conn, buffer, sizeof(buffer), 0);
+		//½ÓÊÕµ½¿Í»§¶Ë·¢ËÍµÄ exit »òÕß Òì³£Ê±ÍË³ö
+		if (strcmp(buffer, "exit") == 0 || len <= 0) {
+			//¹Ø±Õµ±Ç°Ì×½Ó×Ö
+			close(conn);
+			sock_arr[conn] = false;
+			break;
+		}
+		cout << "Recv from ID: " << conn << endl << " message:" << buffer << endl;
+		string ans = "Recved";
+		int ret = send(conn, ans.c_str(), ans.length(), 0);
+		if (ret <= 0) {
+			close(conn);
+			sock_arr[conn] = false;
+			break;
+		}
+	}
 }

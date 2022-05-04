@@ -1,51 +1,69 @@
-ï»¿#include <sys/types.h>
-#include <sys/socket.h>
-#include <stdio.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/shm.h>
-#include <iostream>
-using namespace std;
+#include "Client.h"
 
-int main()
-{
-    //å®šä¹‰socketå¥—æ¥å­—
-    int sock_cli = socket(AF_INET, SOCK_STREAM, 0);
+//¹¹Ôì
+Client::Client(int port, string ip) : server_port(port), server_ip(ip) {}
 
-    //å®šä¹‰
-    struct sockaddr_in servaddr;
+//Îö¹¹
+Client::~Client() {
+	close(sock);
+}
 
-    memset(&servaddr, 0, sizeof(servaddr));
-    //TCP/IPåè®®æ—
-    servaddr.sin_family = AF_INET;
-    //æœåŠ¡å™¨ç«¯å£
-    servaddr.sin_port = htons(8023);  
-    //æœåŠ¡å™¨ip
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");  
+//½¨Á¢Óë·şÎñÆ÷µÄÁ¬½Ó²¢ÇÒÆô¶¯·¢ËÍÏß³ÌºÍ½ÓÊÜÏß³Ì
+void Client::run() {
+	//¶¨Òåsockfd
+	sock = socket(AF_INET, SOCK_STREAM, 0);
 
-    //è¿æ¥æœåŠ¡å™¨ï¼ŒæˆåŠŸè¿”å›0ï¼Œé”™è¯¯è¿”å›-1
-    if (connect(sock_cli, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0)
-    {
-        perror("connect");
-        exit(1);
-    }
-    cout << "è¿æ¥æœåŠ¡å™¨æˆåŠŸï¼\n";
+	//¶¨Òåsockaddr_in
+	struct sockaddr_in servaddr;
+	memset(&servaddr, 0, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;							//µØÖ·×å AF_INETÎª±¾»úÍ¨ĞÅ
+	servaddr.sin_port = htons(server_port);					//¶Ë¿ÚºÅ£¬ÍøÂç×Ö½ÚĞò
+	servaddr.sin_addr.s_addr = inet_addr(server_ip.c_str());//·şÎñÆ÷µÄ IPv4 µØÖ·
 
-    //å®šä¹‰æ¥æ”¶å’Œå‘é€ç¼“å†²åŒº
-    char sendbuf[100];
-    char recvbuf[100];
-    while (true)
-    {
-        memset(sendbuf, 0, sizeof(sendbuf));
-        cin >> sendbuf;
-        send(sock_cli, sendbuf, strlen(sendbuf), 0); //å‘é€
-        if (strcmp(sendbuf, "exit") == 0)
-            break;
-    }
-    close(sock_cli);
-    return 0;
+	//Á¬½Ó·şÎñÆ÷
+	if (connect(sock, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0) {
+		perror("connect");
+		exit(-1);
+	}
+	cout << "Connect successful" << endl;
+
+	//´´½¨½ÓÊÕ×ÓÏß³ÌºÍ·¢ËÍ×ÓÏß³Ì
+	thread send_t(SendMsg, sock);
+	thread recv_t(RecvMsg, sock);
+	send_t.join();
+	cout << "Send thread has been destroy" << endl;
+	recv_t.join();
+	cout << "Recv thread has been destroy" << endl;
+	return;
+}
+
+void Client::SendMsg(int conn) {
+	//ÉèÁ¢»º³åÇø
+	char sendbuf[1000];
+	//Ñ­»·¼ì²â½ÓÊÕ
+	while (true) {
+		//³õÊ¼»¯»º³åÇø
+		memset(sendbuf, 0, sizeof(sendbuf));
+		cin >> sendbuf;
+		int ret = send(conn, sendbuf, strlen(sendbuf), 0);
+		//Òì³£Ê±ºò»òÕß »º´æÇøÖ»ÓĞ exit Ê±ÍË³ö
+		if (strcmp(sendbuf, "exit") == 0 || ret <= 0) {
+			break;
+		}
+	}
+}
+
+void Client::RecvMsg(int conn) {
+	//ÉèÁ¢»º³åÇø
+	char recvbuf[1000];
+	//Ñ­»·¼ì²â½ÓÊÕ
+	while (true) {
+		//³õÊ¼»¯»º³åÇø
+		memset(recvbuf, 0, sizeof(recvbuf));
+		int len = recv(conn, recvbuf, sizeof(recvbuf), 0);
+		if (len <= 0) {
+			break;
+		}
+		cout << "Recv message from Server£º" << recvbuf << endl;
+	}
 }
